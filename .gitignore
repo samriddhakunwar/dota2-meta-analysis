@@ -1,0 +1,20 @@
+# data: never commit
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+*.zip
+*.duckdb
+*.duckdb.wal
+*.parquet
+*.csv
+
+# envs & caches
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ipynb_checkpoints/
+.DS_Store
