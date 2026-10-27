@@ -1,6 +1,6 @@
 # PROGRESS: handoff notes
 
-Day 2 starts here. Day 1 ended on 2026-10-26.
+**Status: complete (2026-10-27).** Day 1: 2026-10-26 (pipeline + first three analyses). Day 2: 2026-10-27 (remaining analyses, dashboard, final README).
 
 ## Source data (as found, not as described)
 
@@ -49,6 +49,9 @@ Final clean data: **73,599 matches, 1,765,596 draft rows**, 399 leagues, Radiant
 | Overperformer | Wilson 95% CI lower bound > 50% | `sql/02` |
 | Trap pick | pick rate ≥ the patch's 75th-percentile pick rate (among heroes with 100+ picks) **and** CI upper bound < 50% | `sql/02` |
 | Low-sample month (chart only) | < 1,000 matches, drawn as hollow markers | `charts.py` |
+| Draft phase 1 | `draft_order` 0–8 (7 bans, then 2 picks); phase 2 = 9–17, phase 3 = 18–23. Same slot layout in all 7 patches; a few slots carry the "wrong" pick/ban type (at most 0.4% of a slot, slot 21) and are kept as-is | `sql/05` |
+| Minimum games for a hero pair | 50 same-team games together (per patch, or pooled across patches) | `sql/06` |
+| Synergy / anti-synergy | Wilson 95% CI of the pair win rate excludes the log-odds expected rate | `sql/06` |
 
 ## Patches
 
@@ -79,12 +82,29 @@ Final clean data: **73,599 matches, 1,765,596 draft rows**, 399 leagues, Radiant
 - [x] Makefile (`data`, `analysis`, `figures`, `test`, `all`). `make` isn't installed on the dev machine; its commands were run directly.
 - [x] WIP README with three findings
 
-## Remaining for Day 2
+## Done (Day 2)
 
-- [ ] More analyses (one `.sql` each): first-pick/phase priorities using `draft_order`, Radiant vs Dire side win rate per patch, ban-vs-pick profiles (ban-heavy "respect bans"), hero pairs/synergy, league-tier differences (`league_tier`).
-- [ ] Streamlit dashboard in `app/` (+ `make app` target, add `streamlit` to `requirements.txt`). It should read the Parquet files in `data/processed/`.
-- [ ] Final README: full findings, dashboard screenshot, method notes (Wilson CI, effective number), limitations (coverage drop, truncated 7.35).
-- [ ] Optional: diversity per patch (sample-size-robust), or bootstrap CIs for effective heroes.
+- [x] `sql/05_draft_priority` (first-phase picks/bans), `06_hero_synergy` (log-odds expected win rate, lift, per patch + pooled), `07_side_advantage` (Radiant win rate + Wilson CI, per patch + pooled)
+- [x] Macros `logit`, `expected_pair_win_rate` in `00_macros.sql`
+- [x] Charts: `draft_priority`, `synergy`, `side_advantage`
+- [x] `metrics.py` also writes every result table + `patches` to `data/app/` (0.75 MB, committed; `.gitignore` re-includes `data/app/*.parquet`)
+- [x] Streamlit dashboard `app/streamlit_app.py` (5 pages, patch selector, `st.cache_data`), `make app`. All pages checked with `streamlit.testing` AppTest for patches 7.41 and 7.36, plus a live server start
+- [x] 8 pytest tests (added: log-odds expected win rate, synergy lift on a hand-built toy, 50-game threshold)
+- [x] Final README; full pipeline re-run from scratch reproduces 73,599 matches / 1,765,596 draft rows
+
+Day 2 notes:
+- Synergy noise check (printed by `make analysis`): standardised lift variance 0.967 pooled / 0.907 per patch, with 4.7% of pooled pairs flagged. That is consistent with sampling noise, and the README says so.
+
+## Possible extensions
+
+- League-tier breakdown (`league_tier`): does the premium-tier meta differ from lower tiers?
+- Ban-vs-pick profiles: heroes banned far more than picked ("respect bans") over time.
+- Control for team strength (e.g. team Elo or fixed effects in a logistic model) before reading win rates or synergy.
+- Shrinkage (empirical Bayes) for pair lifts instead of a hard 50-game cut-off; multiple-testing correction (Benjamini-Hochberg).
+- Counter-picks: cross-team pairs (same idea as synergy, hero vs. hero).
+- Separate the side effect from first-pick choice by draft order (who picked first), where derivable.
+- Bootstrap CIs for the effective number of heroes; per-patch diversity robust to sample size.
+- Scheduled refresh when the Kaggle dataset updates.
 
 ## How to run
 
@@ -94,4 +114,5 @@ make all PY=.venv/Scripts/python ZIP=../archive.zip
 # without make:
 PYTHONPATH=src python -m dota_meta.load ../archive.zip && PYTHONPATH=src python -m dota_meta.clean
 PYTHONPATH=src python -m dota_meta.metrics && PYTHONPATH=src python -m dota_meta.charts && python -m pytest -q
+streamlit run app/streamlit_app.py   # make app
 ```
