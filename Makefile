@@ -3,7 +3,7 @@ PY  ?= python
 ZIP ?= ../archive.zip
 RUN  = PYTHONPATH=src $(PY) -m
 
-.PHONY: all data analysis figures test
+.PHONY: all data analysis figures test app
 
 all: data analysis figures test
 
@@ -11,7 +11,7 @@ data:            ## selective unzip -> raw DuckDB tables -> clean tables + Parqu
 	$(RUN) dota_meta.load $(ZIP)
 	$(RUN) dota_meta.clean
 
-analysis:        ## run sql/*.sql, save result tables to data/processed/
+analysis:        ## run sql/*.sql, save result tables to data/processed/ (+ small copies in data/app/)
 	$(RUN) dota_meta.metrics
 
 figures:         ## render PNG charts to reports/figures/
@@ -19,3 +19,6 @@ figures:         ## render PNG charts to reports/figures/
 
 test:
 	$(PY) -m pytest -q
+
+app:             ## Streamlit dashboard (reads data/app/ only)
+	$(PY) -m streamlit run app/streamlit_app.py

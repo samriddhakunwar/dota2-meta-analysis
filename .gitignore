@@ -7,6 +7,7 @@ data/processed/*
 *.duckdb
 *.duckdb.wal
 *.parquet
+!data/app/*.parquet
 *.csv
 
 # envs & caches
