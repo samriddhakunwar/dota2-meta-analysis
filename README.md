@@ -102,6 +102,8 @@ make app
 
 Without `make`: `PYTHONPATH=src python -m dota_meta.load path/to/archive.zip`, then `dota_meta.clean`, `dota_meta.metrics`, `dota_meta.charts`, then `python -m pytest`. A full run from scratch takes about 15 seconds after the download.
 
+For the full write-up of all results, see [FINDINGS.md](FINDINGS.md).
+
 ## Repo structure
 
 ```
