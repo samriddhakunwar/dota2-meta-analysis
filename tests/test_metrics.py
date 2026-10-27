@@ -19,6 +19,9 @@ def toy_db(draft_rows: list[tuple]) -> duckdb.DuckDBPyConnection:
     con.execute("""CREATE TABLE patches AS
         SELECT patch_id, any_value(patch_name) patch_name, min(start_time) release_time,
                count(DISTINCT match_id) n_matches, true included FROM draft GROUP BY 1""")
+    con.execute("CREATE TABLE heroes AS SELECT DISTINCT hero_id, hero_name FROM draft")
+    con.execute("""CREATE TABLE matches AS SELECT match_id, any_value(patch_id) patch_id, any_value(patch_name) patch_name,
+                   bool_or((team = 0) = team_won) radiant_win FROM draft GROUP BY 1""")
     metrics.run(con)
     return con
 
@@ -67,6 +70,42 @@ def test_patch_shift_uses_previous_patch():
     (change,) = con.sql("SELECT contest_rate_change FROM patch_shifts WHERE hero_id = 1").fetchall()[0]
     assert change == pytest.approx(-0.5)
     assert not math.isnan(change)
+
+
+def match(m: int, radiant: tuple, dire: tuple, radiant_won: bool) -> list[tuple]:
+    """Draft rows (picks only) for one patch-40 match."""
+    return [(m, 40, "01-05", True, team, h, (team == 0) == radiant_won)
+            for team, heroes in ((0, radiant), (1, dire)) for h in heroes]
+
+
+def test_expected_pair_win_rate_log_odds():
+    con = duckdb.connect()
+    con.execute((metrics.SQL / "00_macros.sql").read_text())
+    got = con.sql("SELECT expected_pair_win_rate(0.6, 0.6), expected_pair_win_rate(0.5, 0.7), "
+                  "expected_pair_win_rate(0.7, 0.3)").fetchall()[0]
+    # odds 1.5 * 1.5 = 2.25 -> 2.25 / 3.25;  a 50% hero adds nothing;  odds 7/3 * 3/7 = 1 -> 50%
+    assert got == pytest.approx((0.36 / 0.52, 0.7, 0.5))
+
+
+def test_synergy_lift():
+    # 50 matches 1+2 vs 3+4, Radiant wins 35;  50 matches 1+3 vs 2+4, Radiant wins 25.
+    # Individual win rates: hero 1 = (35+25)/100 = 0.6, hero 2 = (35+25)/100 = 0.6, heroes 3 and 4 = 0.4.
+    rows = [r for m in range(50) for r in match(m, (1, 2), (3, 4), m < 35)]
+    rows += [r for m in range(50, 100) for r in match(m, (1, 3), (2, 4), m < 75)]
+    con = toy_db(rows)
+    got = {(a, b): (n, wr, exp, lift) for a, b, n, wr, exp, lift in con.sql(
+        "SELECT hero_a, hero_b, games, win_rate, expected_win_rate, lift FROM hero_synergy WHERE patch_id = 40").fetchall()}
+    assert set(got) == {(1, 2), (3, 4), (1, 3), (2, 4)}                 # same-team pairs only, never 1+4 or 2+3
+    assert got[(1, 2)] == pytest.approx((50, 0.7, 0.36 / 0.52, 0.7 - 0.36 / 0.52))   # +0.77 pp
+    assert got[(3, 4)] == pytest.approx((50, 0.3, 0.16 / 0.52, 0.3 - 0.16 / 0.52))   # -0.77 pp
+    assert got[(1, 3)] == pytest.approx((50, 0.5, 0.5, 0.0))            # 0.6 and 0.4 cancel out
+    pooled = con.sql("SELECT lift FROM hero_synergy WHERE patch_id IS NULL AND hero_a = 1 AND hero_b = 2").fetchall()
+    assert pooled[0][0] == pytest.approx(0.7 - 0.36 / 0.52)              # one patch: pooled == per patch
+
+
+def test_synergy_needs_50_games():
+    con = toy_db([r for m in range(49) for r in match(m, (1, 2), (3, 4), m % 2 == 0)])
+    assert con.sql("SELECT count(*) FROM hero_synergy").fetchall()[0][0] == 0
 
 
 @pytest.mark.skipif(not DB.exists(), reason="run `make data` first")
