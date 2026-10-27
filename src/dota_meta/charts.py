@@ -138,6 +138,79 @@ def risers_fallers(con, n: int = 10) -> None:
     _save(fig, "risers_fallers", height=720)
 
 
+def draft_priority(con, n: int = 15) -> None:
+    df = con.sql(f"""SELECT * FROM draft_priority WHERE patch_id = (SELECT max(patch_id) FROM draft_priority)
+                     ORDER BY p1_contest_rate DESC LIMIT {n}""").df().iloc[::-1]  # top hero on top
+    patch = df.patch_name.iloc[0]
+    fig = go.Figure()
+    for col, name, color in [("p1_pick_rate", "first-phase pick", BLUE), ("p1_ban_rate", "first-phase ban", ORANGE)]:
+        fig.add_trace(go.Bar(x=df[col] * 100, y=df.hero_name, orientation="h", name=name,
+                             marker=dict(color=color, line=dict(color=SURFACE, width=2)),
+                             hovertemplate="%{y}: %{x:.1f}% of matches<extra>" + name + "</extra>"))
+    fig.add_trace(go.Scatter(x=df.p1_contest_rate * 100, y=df.hero_name, mode="text", showlegend=False,
+                             text=[f"{v:.0f}%" for v in df.p1_contest_rate * 100], textposition="middle right",
+                             textfont=dict(size=11, color=INK_2), hoverinfo="skip", cliponaxis=False))
+    fig.update_layout(barmode="stack", bargap=0.25, legend=dict(traceorder="normal"),
+                      title=_title(f"Who gets grabbed or denied first? First-phase priority, patch {patch}",
+                                   f"Share of matches where the hero is picked or banned in phase 1 (draft slots 0-8: "
+                                   f"7 bans, then 2 picks); top {n} heroes"),
+                      xaxis=dict(title="Share of matches (%)", ticksuffix="%"),
+                      yaxis=dict(title=None, showgrid=False), margin=dict(l=150, r=60, t=110, b=105))
+    _save(fig, "draft_priority", height=720)
+
+
+def synergy(con, n: int = 10) -> None:
+    df = con.sql(f"""(SELECT * FROM hero_synergy WHERE patch_id IS NULL ORDER BY lift DESC LIMIT {n})
+                     UNION ALL (SELECT * FROM hero_synergy WHERE patch_id IS NULL ORDER BY lift LIMIT {n})""").df()
+    df = df.sort_values("lift")
+    df["pair"] = df.hero_a_name + " + " + df.hero_b_name + "  (" + df.games.astype(str) + ")"
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=df.expected_win_rate * 100, y=df.pair, mode="markers", name="expected (individual win rates)",
+                             marker=dict(symbol="line-ns", size=14, line=dict(color=INK_2, width=2)),
+                             hovertemplate="%{y}: expected %{x:.1f}%<extra></extra>"))
+    for d, name, color in [(df[df.lift > 0], f"top {n} by lift", BLUE), (df[df.lift < 0], f"bottom {n} by lift", RED)]:
+        fig.add_trace(go.Scatter(
+            x=d.win_rate * 100, y=d.pair, mode="markers", name=f"{name}: observed win rate (95% CI)",
+            marker=dict(color=color, size=10, line=dict(color=SURFACE, width=2)),
+            error_x=dict(type="data", symmetric=False, array=(d.ci_high - d.win_rate) * 100,
+                         arrayminus=(d.win_rate - d.ci_low) * 100, color=MUTED, thickness=1.5, width=0),
+            customdata=d.lift * 100, hovertemplate="%{y}: %{x:.1f}% (lift %{customdata:+.1f} pp)<extra></extra>"))
+    fig.add_hline(y=n - 0.5, line=dict(color=GRID, width=1))
+    fig.add_vline(x=50, line=dict(color=MUTED, width=1, dash="dot"))
+    fig.update_layout(title=_title(f"Best and worst same-team hero pairs, all patches pooled",
+                                   "Pairs ranked by lift = observed - expected win rate; "
+                                   "games together in brackets, at least 50"),
+                      xaxis=dict(title="Win rate when both heroes are on the same team", ticksuffix="%"),
+                      yaxis=dict(title=None, showgrid=False), margin=dict(l=280, r=40, t=110, b=105))
+    _save(fig, "synergy", height=780)
+
+
+def side_advantage(con) -> None:
+    df = con.sql("SELECT * FROM side_advantage WHERE patch_id IS NOT NULL ORDER BY patch_id").df()
+    pooled = con.sql("SELECT radiant_win_rate FROM side_advantage WHERE patch_id IS NULL").fetchall()[0][0]
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=list(df.patch_name) + list(df.patch_name[::-1]),
+                             y=list(df.ci_high * 100) + list(df.ci_low[::-1] * 100), fill="toself", mode="lines",
+                             fillcolor="rgba(42,120,214,0.15)", line=dict(width=0), name="95% CI (Wilson)",
+                             hoverinfo="skip"))
+    fig.add_trace(go.Scatter(x=df.patch_name, y=df.radiant_win_rate * 100, mode="lines+markers", name="Radiant win rate",
+                             line=dict(color=BLUE, width=2), marker=dict(size=9, line=dict(color=SURFACE, width=2)),
+                             customdata=df[["ci_low", "ci_high"]].values * 100, text=df.matches,
+                             hovertemplate="%{x}: %{y:.1f}% (CI %{customdata[0]:.1f}-%{customdata[1]:.1f}%, "
+                                           "%{text:,} matches)<extra></extra>"))
+    fig.add_hline(y=50, line=dict(color=INK_2, width=1, dash="dash"))
+    fig.add_hline(y=pooled * 100, line=dict(color=MUTED, width=1, dash="dot"))
+    fig.add_annotation(x=1, xref="paper", y=pooled * 100, text=f"all patches: {pooled * 100:.1f}%", showarrow=False,
+                       xanchor="right", yanchor="bottom", font=dict(size=11, color=MUTED))
+    fig.add_annotation(x=1, xref="paper", y=50, text="no side advantage", showarrow=False,
+                       xanchor="right", yanchor="top", font=dict(size=11, color=INK_2))
+    fig.update_layout(title=_title("Does Radiant have the edge? Radiant win rate by patch",
+                                   "Share of matches won by the Radiant side, with Wilson 95% confidence band"),
+                      xaxis=dict(title="Patch", type="category", showgrid=False),
+                      yaxis=dict(title="Radiant win rate", ticksuffix="%", range=[47, 56]))
+    _save(fig, "side_advantage")
+
+
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8")
     FIG.mkdir(parents=True, exist_ok=True)
@@ -146,3 +219,6 @@ if __name__ == "__main__":
         winrate_scatter(con)
         diversity_line(con)
         risers_fallers(con)
+        draft_priority(con)
+        synergy(con)
+        side_advantage(con)
