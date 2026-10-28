@@ -2,7 +2,7 @@
 
 Every Dota 2 patch reshuffles which of the 127 heroes professional teams fight over in the draft. This project takes **73,599 Captains Mode pro matches (Jan 2024 to Sep 2026, seven patches from 7.35 to 7.41)** and builds a reproducible SQL pipeline on DuckDB to answer the questions a drafter or analyst actually asks. Which heroes define a patch? Which popular picks quietly lose? What do teams take or deny first? Do hero pairs really "synergise"? Does the Radiant side have an edge? Every rate comes with a sample size, and win rates come with a confidence interval, because in pro Dota most eye-catching win rates are small-sample noise.
 
-**Live dashboard:** _[link coming soon: Streamlit Community Cloud]_
+**Live dashboard:** (https://dota2-pro-meta.streamlit.app/)
 
 ## Key findings
 
