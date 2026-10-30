@@ -2,7 +2,9 @@
 
 Every Dota 2 patch reshuffles which of the 127 heroes professional teams fight over in the draft. This project takes **73,599 Captains Mode pro matches (Jan 2024 to Sep 2026, seven patches from 7.35 to 7.41)** and builds a reproducible SQL pipeline on DuckDB to answer the questions a drafter or analyst actually asks. Which heroes define a patch? Which popular picks quietly lose? What do teams take or deny first? Do hero pairs really "synergise"? Does the Radiant side have an edge? Every rate comes with a sample size, and win rates come with a confidence interval, because in pro Dota most eye-catching win rates are small-sample noise.
 
-**Live dashboard:** (https://dota2-pro-meta.streamlit.app/)
+**Live dashboard:** [dota2-pro-meta.streamlit.app](https://dota2-pro-meta.streamlit.app/)
+
+[![Dashboard: Meta Overview](reports/figures/dashboard.png)](https://dota2-pro-meta.streamlit.app/)
 
 ## Key findings
 
@@ -72,7 +74,7 @@ Cleaning (full details in [PROGRESS.md](PROGRESS.md)):
 
 ## Dashboard
 
-[`app/streamlit_app.py`](app/streamlit_app.py) has a patch selector and five pages: **Meta Overview**, **Hero Lookup** (one hero across patches), **Draft Priority**, **Synergy Explorer** (pick a hero, see its best and worst partners) and **Side Advantage**.
+[`app/streamlit_app.py`](app/streamlit_app.py) is the entry point (navigation, global patch selector, footer); each page lives in [`app/views/`](app/views) and shares the theme, chart template and table formats in [`app/ui.py`](app/ui.py). Five pages: **Meta Overview**, **Hero Lookup** (one hero across patches), **Draft Priority**, **Synergy Explorer** (pick a hero, see its best and worst partners) and **Side Advantage**.
 
 ```bash
 make app            # or: streamlit run app/streamlit_app.py
@@ -113,7 +115,10 @@ src/dota_meta/
   clean.py            dedupe, complete drafts, patch/hero mapping, Parquet export
   metrics.py          runs the SQL files through DuckDB, exports result tables
   charts.py           shared Plotly style + the README charts
-app/streamlit_app.py  dashboard (reads data/app/ only)
+app/streamlit_app.py  dashboard entry point (reads data/app/ only)
+app/views/            one module per dashboard page
+app/ui.py             shared theme, Plotly template, table formats
+.streamlit/           dashboard theme
 data/app/             small aggregated result tables (committed, used by the dashboard)
 data/raw, data/processed   gitignored
 tests/                hand-checkable tests on toy tables (Wilson CI, rates, entropy, patch shift, synergy lift) + cleaned-data checks
